@@ -221,7 +221,10 @@ fastify.get<{ Querystring: DoneQuery }>("/done", async (request, reply) => {
         return reply.code(500).send("Code verifier not found");
       }
 
-      fastify.log.info({ sessionId: state }, "Authorization code received, exchanging for token");
+      fastify.log.info(
+        { sessionId: state },
+        "Authorization code received, exchanging for token"
+      );
 
       // Exchange code for access token server-side
       const redirectUri = `${process.env.SERVER_URL}/done`;
@@ -439,7 +442,7 @@ fastify.get("/health", async (_request, reply) => {
  */
 const start = async () => {
   try {
-    const port = parseInt(process.env.PORT || "3000", 10);
+    const port = parseInt(process.env.PORT || "5173", 10);
     const host = process.env.HOST || "0.0.0.0";
 
     await fastify.listen({ port, host });

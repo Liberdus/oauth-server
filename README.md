@@ -99,10 +99,10 @@ cp .env.example .env
 Edit `.env` and add your Google OAuth credentials:
 
 ```env
-PORT=3000
-SERVER_URL=http://localhost:3000
+PORT=5173
+SERVER_URL=http://localhost:5173
 GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
-ALLOWED_ORIGINS=http://localhost:3000,http://localhost:5173
+ALLOWED_ORIGINS=http://localhost:5173,http://localhost:3000
 ```
 
 ### Google OAuth Setup
@@ -113,7 +113,7 @@ ALLOWED_ORIGINS=http://localhost:3000,http://localhost:5173
 4. Go to **Credentials** → **Create Credentials** → **OAuth 2.0 Client ID**
 5. Application type: **Web application**
 6. Add authorized redirect URIs:
-   - `http://localhost:3000/done` (development)
+   - `http://localhost:5173/done` (development)
    - `https://your-domain.com/done` (production)
 7. Copy the **Client ID** and **Client Secret** to your `.env` file
    - `GOOGLE_CLIENT_ID`: Required for both flows
@@ -151,7 +151,7 @@ npm start
 ```javascript
 const sessionId = crypto.randomUUID();
 window.open(
-  `http://localhost:3000/auth?sessionId=${sessionId}&provider=google`
+  `http://localhost:5173/auth?sessionId=${sessionId}&provider=google`
 );
 ```
 
@@ -161,7 +161,7 @@ window.open(
 // Server generates PKCE parameters automatically!
 const sessionId = crypto.randomUUID();
 window.open(
-  `http://localhost:3000/auth?sessionId=${sessionId}&provider=google&flow=code`
+  `http://localhost:5173/auth?sessionId=${sessionId}&provider=google&flow=code`
 );
 ```
 
@@ -236,7 +236,7 @@ No client-side PKCE code needed!
 ```javascript
 async function pollForToken(sessionId) {
   const response = await fetch(
-    `http://localhost:3000/auth/poll?sessionId=${sessionId}`
+    `http://localhost:5173/auth/poll?sessionId=${sessionId}`
   );
   const data = await response.json();
   return data.token; // Final access token ready to use!
@@ -339,7 +339,7 @@ class OAuthClient {
 }
 
 // Usage
-const oauthClient = new OAuthClient("http://localhost:3000");
+const oauthClient = new OAuthClient("http://localhost:5173");
 
 document.getElementById("login-btn").addEventListener("click", async () => {
   try {
@@ -358,12 +358,12 @@ document.getElementById("login-btn").addEventListener("click", async () => {
 
 | Variable               | Description                | Default                 |
 | ---------------------- | -------------------------- | ----------------------- |
-| `PORT`                 | Server port                | `3000`                  |
+| `PORT`                 | Server port                | `5173`                  |
 | `HOST`                 | Server host                | `0.0.0.0`               |
 | `NODE_ENV`             | Environment                | `development`           |
 | `LOGGING`              | Enable/disable logging     | `true`                  |
 | `LOG_LEVEL`            | Logging level              | `info`                  |
-| `SERVER_URL`           | Public server URL          | `http://localhost:3000` |
+| `SERVER_URL`           | Public server URL          | `http://localhost:5173` |
 | `ALLOWED_ORIGINS`      | CORS allowed origins       | `*`                     |
 | `GOOGLE_CLIENT_ID`     | Google OAuth client ID     | (required)              |
 | `GOOGLE_CLIENT_SECRET` | Google OAuth client secret | (required for PKCE)     |
@@ -399,7 +399,7 @@ RUN npm ci --only=production
 COPY . .
 RUN npm run build
 
-EXPOSE 3000
+EXPOSE 5173
 
 CMD ["npm", "start"]
 ```

@@ -136,7 +136,7 @@
 
     <div class="config">
       <label for="server-url">OAuth Server URL:</label>
-      <input type="text" id="server-url" value="http://localhost:3000" placeholder="http://localhost:3000">
+      <input type="text" id="server-url" placeholder="http://localhost:5173">
     </div>
 
     <div class="config">
@@ -260,9 +260,12 @@
       }
     }
 
-    // Test server connection on load
+    // Set server URL to origin and test connection on load
     window.addEventListener('load', async () => {
-      const serverUrl = document.getElementById('server-url').value.trim();
+      const serverUrlInput = document.getElementById('server-url');
+      serverUrlInput.value = window.location.origin;
+
+      const serverUrl = serverUrlInput.value.trim();
       try {
         const response = await fetch(`${serverUrl}/health`);
         if (response.ok) {
