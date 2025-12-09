@@ -3,6 +3,7 @@ import cors from "@fastify/cors";
 import fastifyStatic from "@fastify/static";
 import NodeCache from "node-cache";
 import path from "path";
+import crypto from "crypto";
 import "dotenv/config";
 
 const fastify = Fastify({
@@ -33,6 +34,7 @@ fastify.register(fastifyStatic, {
 interface AuthQuery {
   sessionId: string;
   provider: string;
+  flow?: "implicit" | "code";
 }
 
 interface PollQuery {
@@ -44,25 +46,89 @@ interface SaveBody {
   token: string;
 }
 
+interface DoneQuery {
+  code?: string;
+  state?: string;
+  error?: string;
+}
+
 interface SessionData {
   provider: string;
   createdAt: number;
+  flow: "implicit" | "code";
+  codeChallenge?: string;
+  codeVerifier?: string;
 }
 
 // OAuth provider configurations
 const OAUTH_CONFIGS = {
   google: {
     authUrl: "https://accounts.google.com/o/oauth2/v2/auth",
+    tokenUrl: "https://oauth2.googleapis.com/token",
     scopes: ["https://www.googleapis.com/auth/drive.file"],
   },
 };
+
+// PKCE helper functions
+function generateCodeVerifier(): string {
+  const possible =
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~";
+  const values = Array.from(crypto.getRandomValues(new Uint8Array(128)));
+  return values.map((x) => possible[x % possible.length]).join("");
+}
+
+function generateCodeChallenge(verifier: string): string {
+  const hash = crypto.createHash("sha256").update(verifier).digest();
+  return hash
+    .toString("base64")
+    .replace(/=/g, "")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_");
+}
+
+// Exchange authorization code for access token
+async function exchangeCodeForToken(
+  code: string,
+  codeVerifier: string,
+  redirectUri: string
+): Promise<any> {
+  const tokenUrl = OAUTH_CONFIGS.google.tokenUrl;
+
+  const params: Record<string, string> = {
+    code,
+    client_id: process.env.GOOGLE_CLIENT_ID || "",
+    code_verifier: codeVerifier,
+    grant_type: "authorization_code",
+    redirect_uri: redirectUri,
+  };
+
+  // Add client_secret if available (required for web applications)
+  if (process.env.GOOGLE_CLIENT_SECRET) {
+    params.client_secret = process.env.GOOGLE_CLIENT_SECRET;
+  }
+
+  const response = await fetch(tokenUrl, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    body: new URLSearchParams(params),
+  });
+
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(`Token exchange failed: ${error}`);
+  }
+
+  return response.json();
+}
 
 /**
  * GET /auth?sessionId=xxx&provider=google
  * Saves sessionId and redirects to OAuth provider
  */
 fastify.get<{ Querystring: AuthQuery }>("/auth", async (request, reply) => {
-  const { sessionId, provider } = request.query;
+  const { sessionId, provider, flow = "implicit" } = request.query;
 
   // Validate parameters
   if (!sessionId || !provider) {
@@ -86,14 +152,26 @@ fastify.get<{ Querystring: AuthQuery }>("/auth", async (request, reply) => {
     });
   }
 
+  // Generate PKCE parameters server-side for code flow
+  let codeVerifier: string | undefined;
+  let codeChallenge: string | undefined;
+
+  if (flow === "code") {
+    codeVerifier = generateCodeVerifier();
+    codeChallenge = generateCodeChallenge(codeVerifier);
+  }
+
   // Save session data
   const sessionData: SessionData = {
     provider,
     createdAt: Date.now(),
+    flow,
+    codeChallenge,
+    codeVerifier,
   };
   cache.set(sessionId, sessionData);
 
-  fastify.log.info({ sessionId, provider }, "Session created");
+  fastify.log.info({ sessionId, provider, flow }, "Session created");
 
   // Build OAuth URL
   const config = OAUTH_CONFIGS[provider];
@@ -102,10 +180,18 @@ fastify.get<{ Querystring: AuthQuery }>("/auth", async (request, reply) => {
   const oauthUrl = new URL(config.authUrl);
   oauthUrl.searchParams.set("client_id", process.env.GOOGLE_CLIENT_ID || "");
   oauthUrl.searchParams.set("redirect_uri", redirectUri);
-  oauthUrl.searchParams.set("response_type", "token");
   oauthUrl.searchParams.set("scope", config.scopes.join(" "));
   oauthUrl.searchParams.set("state", sessionId);
   oauthUrl.searchParams.set("prompt", "consent");
+
+  // Set response type and PKCE params based on flow
+  if (flow === "code") {
+    oauthUrl.searchParams.set("response_type", "code");
+    oauthUrl.searchParams.set("code_challenge", codeChallenge!);
+    oauthUrl.searchParams.set("code_challenge_method", "S256");
+  } else {
+    oauthUrl.searchParams.set("response_type", "token");
+  }
 
   // Redirect to OAuth provider
   return reply.redirect(oauthUrl.toString(), 302);
@@ -113,9 +199,74 @@ fastify.get<{ Querystring: AuthQuery }>("/auth", async (request, reply) => {
 
 /**
  * GET /done
- * OAuth callback page that extracts token from URL fragment and sends to server
+ * OAuth callback - handles both implicit flow (fragment) and code flow (query params)
  */
-fastify.get("/done", async (_request, reply) => {
+fastify.get<{ Querystring: DoneQuery }>("/done", async (request, reply) => {
+  const { code, state, error } = request.query;
+
+  // Handle authorization code flow (PKCE)
+  if (code && state) {
+    try {
+      // Get session data
+      const session = cache.get<SessionData>(state);
+      if (!session) {
+        return reply.code(404).send("Session not found or expired");
+      }
+
+      if (session.flow !== "code") {
+        return reply.code(400).send("Invalid flow for this session");
+      }
+
+      if (!session.codeVerifier) {
+        return reply.code(500).send("Code verifier not found");
+      }
+
+      fastify.log.info({ sessionId: state }, "Authorization code received, exchanging for token");
+
+      // Exchange code for access token server-side
+      const redirectUri = `${process.env.SERVER_URL}/done`;
+      const tokenData = await exchangeCodeForToken(
+        code,
+        session.codeVerifier,
+        redirectUri
+      );
+
+      // Store the access token
+      cache.set(`token:${state}`, tokenData.access_token);
+
+      fastify.log.info({ sessionId: state }, "Token exchange successful");
+
+      const html = `
+        <!DOCTYPE html>
+        <html>
+        <head><meta charset="UTF-8"><title>OAuth Complete</title></head>
+        <body>
+          <script>
+            setTimeout(() => window.close(), 500);
+          </script>
+        </body>
+        </html>
+      `;
+
+      return reply.type("text/html").send(html);
+    } catch (err) {
+      fastify.log.error(err);
+      return reply.code(500).send("Token exchange failed");
+    }
+  }
+
+  // Handle errors
+  if (error) {
+    return reply.send(`
+      <!DOCTYPE html>
+      <html>
+      <head><meta charset="UTF-8"><title>OAuth Error</title></head>
+      <body><script>setTimeout(() => window.close(), 1000);</script></body>
+      </html>
+    `);
+  }
+
+  // Handle implicit flow (token in fragment)
   const html = `
     <!DOCTYPE html>
     <html>
@@ -162,7 +313,6 @@ fastify.get("/done", async (_request, reply) => {
           })
           .catch(err => console.error('Error saving token:', err))
           .finally(() => {
-            // Close window after sending token
             setTimeout(() => window.close(), 500);
           });
         })();

@@ -139,6 +139,14 @@
       <input type="text" id="server-url" value="http://localhost:3000" placeholder="http://localhost:3000">
     </div>
 
+    <div class="config">
+      <label for="flow-type">OAuth Flow:</label>
+      <select id="flow-type" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; margin-top: 5px;">
+        <option value="implicit">Implicit Flow (less secure, simpler)</option>
+        <option value="code" selected>Authorization Code + PKCE (more secure)</option>
+      </select>
+    </div>
+
     <button id="auth-btn" onclick="startAuth()">
       Connect to Google Drive
     </button>
@@ -153,11 +161,11 @@
         this.serverUrl = serverUrl;
       }
 
-      async authenticate(provider = 'google') {
+      async authenticate(provider = 'google', flow = 'implicit') {
         // Generate session ID
         const sessionId = crypto.randomUUID();
 
-        this.showStatus('Opening OAuth window...', 'loading');
+        this.showStatus(`Opening OAuth window (${flow} flow)...`, 'loading');
 
         // Open OAuth popup
         const width = 500;
@@ -166,7 +174,7 @@
         const top = window.screen.height / 2 - height / 2;
 
         const popup = window.open(
-          `${this.serverUrl}/auth?sessionId=${sessionId}&provider=${provider}`,
+          `${this.serverUrl}/auth?sessionId=${sessionId}&provider=${provider}&flow=${flow}`,
           'oauth',
           `width=${width},height=${height},left=${left},top=${top}`
         );
@@ -229,6 +237,7 @@
     async function startAuth() {
       const btn = document.getElementById('auth-btn');
       const serverUrl = document.getElementById('server-url').value.trim();
+      const flow = document.getElementById('flow-type').value;
 
       if (!serverUrl) {
         alert('Please enter a server URL');
@@ -239,8 +248,8 @@
       oauthClient = new OAuthClient(serverUrl);
 
       try {
-        const token = await oauthClient.authenticate('google');
-        oauthClient.showStatus('Success! Token received', 'success');
+        const token = await oauthClient.authenticate('google', flow);
+        oauthClient.showStatus(`Success! Access token received (${flow} flow)`, 'success');
         oauthClient.showToken(token);
         console.log('Access token:', token);
       } catch (error) {
