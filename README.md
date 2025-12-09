@@ -78,7 +78,7 @@ Client                    OAuth Server              Google OAuth
 
 ### Prerequisites
 
-- Node.js 18+
+- Node.js 20+
 - npm or yarn
 - Google Cloud Console project with OAuth credentials
 
@@ -389,7 +389,7 @@ const cache = new NodeCache({ stdTTL: 600, checkperiod: 120 });
 ### Docker
 
 ```dockerfile
-FROM node:18-alpine
+FROM node:20-alpine
 
 WORKDIR /app
 
