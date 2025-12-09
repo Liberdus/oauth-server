@@ -115,7 +115,9 @@ ALLOWED_ORIGINS=http://localhost:3000,http://localhost:5173
 6. Add authorized redirect URIs:
    - `http://localhost:3000/done` (development)
    - `https://your-domain.com/done` (production)
-7. Copy the **Client ID** to your `.env` file
+7. Copy the **Client ID** and **Client Secret** to your `.env` file
+   - `GOOGLE_CLIENT_ID`: Required for both flows
+   - `GOOGLE_CLIENT_SECRET`: Required for code flow (PKCE), optional for implicit flow
 
 ### Running the Server
 
@@ -192,6 +194,10 @@ No client-side PKCE code needed!
 
 **Endpoint:** `POST /auth/save`
 
+**Description:** Saves the OAuth token for a session. **Used only for implicit flow.**
+
+**Note:** PKCE flow exchanges tokens directly in the `/done` endpoint and doesn't use this endpoint.
+
 **Body:**
 
 ```json
@@ -209,7 +215,7 @@ No client-side PKCE code needed!
 }
 ```
 
-**Note:** This is called automatically by the `/done` page.
+**Note:** This is called automatically by the `/done` page during implicit flow.
 
 ---
 

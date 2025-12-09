@@ -326,7 +326,8 @@ fastify.get<{ Querystring: DoneQuery }>("/done", async (request, reply) => {
 
 /**
  * POST /auth/save
- * Saves the OAuth token for a session
+ * Saves the OAuth token for a session (Implicit flow only)
+ * Note: PKCE flow exchanges tokens directly in /done endpoint
  */
 fastify.post<{ Body: SaveBody }>("/auth/save", async (request, reply) => {
   const { sessionId, token } = request.body;
