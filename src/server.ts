@@ -207,6 +207,7 @@ fastify.get<{ Querystring: AuthQuery }>("/auth", async (request, reply) => {
 fastify.get<{ Querystring: DoneQuery }>("/done", async (request, reply) => {
   const { code, state, error } = request.query;
 
+  let pageTitle = "OAuth Success";
   // Handle authorization code flow (PKCE)
   if (code && state) {
     try {
@@ -241,35 +242,41 @@ fastify.get<{ Querystring: DoneQuery }>("/done", async (request, reply) => {
       cache.set(`token:${state}`, tokenData.access_token);
 
       fastify.log.info({ sessionId: state }, "Token exchange successful");
+    } catch (err) {
+      cache.set(`token:${state}`, 'error: "Token exchange failed"');
+      pageTitle = "Oauth Failed";
+      fastify.log.error(err);
+    }
+  }
 
-      const html = `
+  if (error) {
+    cache.set(`token:${state}`, `error: ${error}`);
+    pageTitle = "Oauth Failed";
+  }
+
+  if (code || error) {
+    const html = `
         <!DOCTYPE html>
         <html>
-        <head><meta charset="UTF-8"><title>OAuth Complete</title></head>
+        <head><meta charset="UTF-8"><title>${pageTitle}</title></head>
         <body>
           <script>
-            setTimeout(() => window.close(), 500);
+            function attemptClose() {
+              // Method 1: Standard close
+              try { window.close(); } catch(e) {}
+              
+              // Method 2: Redirect to native app as fallback
+              setTimeout(() => {
+                try { window.location.href = 'exp+liberdus://complete'; } catch(e) {}
+              }, 100);
+            }
+            attemptClose();
           </script>
         </body>
         </html>
       `;
 
-      return reply.type("text/html").send(html);
-    } catch (err) {
-      fastify.log.error(err);
-      return reply.code(500).send("Token exchange failed");
-    }
-  }
-
-  // Handle errors
-  if (error) {
-    return reply.send(`
-      <!DOCTYPE html>
-      <html>
-      <head><meta charset="UTF-8"><title>OAuth Error</title></head>
-      <body><script>setTimeout(() => window.close(), 1000);</script></body>
-      </html>
-    `);
+    return reply.type("text/html").send(html);
   }
 
   // Handle implicit flow (token in fragment)
