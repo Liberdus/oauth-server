@@ -19,9 +19,12 @@ const fastify = Fastify({
 const cache = new NodeCache({ stdTTL: 600, checkperiod: 120 });
 
 // CORS configuration
+const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(",") || ["*"];
+const isWildcard = allowedOrigins.length === 1 && allowedOrigins[0] === "*";
+
 fastify.register(cors, {
-  origin: process.env.ALLOWED_ORIGINS?.split(",") || "*",
-  credentials: true,
+  origin: isWildcard ? true : allowedOrigins, // true allows all origins
+  credentials: !isWildcard, // Only use credentials if not wildcard
 });
 
 // Static file server for client.html
